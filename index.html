@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>stickerbook</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="half left">
+<section class="pane">
+  <div class="bar"><b>1 · draw</b><span class="r">240 × 240</span></div>
+  <div class="note">start crafting your sticker here</div>
+  <div class="body">
+    <div class="hint"><span id="idea"></span><button id="another" class="ghost" title="another idea">↻</button></div>
+    <div id="modes" class="seg"></div>
+    <div id="tools" class="seg"></div>
+    <div id="movehelp" class="mute" hidden>drag a shape to move it to a new spot</div>
+    <div id="pad"></div>
+    <div id="status" class="mute"></div>
+    <div class="row"><div id="swatches"></div><code id="hex"></code></div>
+    <div class="row"><button id="undo">undo</button><button id="redo">redo</button><button id="clear">clear</button></div>
+    <input id="name" maxlength="24" placeholder="name it (becomes the function name)">
+    <div class="label"><span>p5.js <span class="live">live</span></span><span id="meta"></span></div>
+    <div id="code" class="snip"></div>
+    <button id="stick" class="go">make sticker →</button>
+  </div>
+</section>
+
+<section class="pane">
+  <div class="bar"><b>2 · collect</b><span class="r" id="count"></span></div>
+  <div id="cards"></div>
+  <div class="foot"><span>click a card, then copy its code</span></div>
+</section>
+
+</div>
+
+<div class="half right">
+<section class="pane">
+  <div class="bar"><b>3 · compose</b></div>
+  <div class="ed"><pre id="hl" aria-hidden="true"></pre><textarea id="editor" spellcheck="false" autocapitalize="off"></textarea></div>
+  <div class="foot"><span id="runstatus"></span><span>updates as you type</span></div>
+</section>
+
+<section class="pane">
+  <div class="bar"><span class="url">stickerbook · output</span></div>
+  <iframe id="out" sandbox="allow-scripts" title="stickerbook output"></iframe>
+  <div class="foot"><span>drag a sticker to move it · the editor follows</span></div>
+</section>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
