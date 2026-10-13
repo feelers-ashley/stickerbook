@@ -32,17 +32,37 @@ let mode = "draw",
 let shapes = [],
   undone = [],
   drag = null,
-  moving = null; // drawn, being drawn, being moved
+  moving = null; // what is drawn, what is being drawn, what is being moved
 let stickers = [],
   nextId = 1; // the collection
 let idea = rand(IDEAS.length),
   pad;
 
-/* === shapes > p5 commands > code + pixels (1 list feeds both) === */
+/* ---- shapes → p5 commands → code and pixels (one list feeds both) ---- */
+
+const ruler = document.createElement("canvas").getContext("2d");
+function textShape(str, x, y, size) {
+  // p5's default font is sans-serif, so measure with that
+  ruler.font = `${size}px sans-serif`;
+  return {
+    t: "text",
+    c: colour,
+    str,
+    x,
+    y,
+    w: Math.max(1, ruler.measureText(str).width),
+    h: size,
+  };
+}
 
 function shapeFrom(a, b) {
   const x = Math.min(a.x, b.x),
     y = Math.min(a.y, b.y);
+  if (tool === "text") {
+    // drag height sets the size; a plain click uses 28
+    const dy = Math.abs(b.y - a.y);
+    return textShape($("words").value || "text", x, y, dy < 8 ? 28 : dy);
+  }
   return tool === "line"
     ? { t: "line", c: colour, a, b }
     : {
@@ -64,13 +84,14 @@ function commands(list) {
   const out = [["clear"], ["noStroke"]];
   let fill = null,
     stroke = null,
-    weighted = false;
+    weighted = false,
+    size = null;
   for (const s of list) {
     const turned = !!s.r,
       c = centre(s),
       ox = turned ? c.x : 0,
       oy = turned ? c.y : 0;
-    const before = [fill, stroke, weighted];
+    const before = [fill, stroke, weighted, size];
     if (turned) out.push(["push"], ["translate", c.x, c.y], ["rotate", s.r]); // pop() puts the style back too
     if (s.t === "line") {
       if (stroke !== s.c) out.push(["stroke", s.c]);
@@ -88,17 +109,22 @@ function commands(list) {
       const x = s.x - ox,
         y = s.y - oy,
         { w, h } = s;
-      out.push(
-        s.t === "rect"
-          ? ["rect", x, y, w, h]
-          : s.t === "ellipse"
-          ? ["ellipse", x + w / 2, y + h / 2, w, h]
-          : ["triangle", x + w / 2, y, x, y + h, x + w, y + h]
-      );
+      if (s.t === "text") {
+        if (size !== h) out.push(["textSize", h]);
+        size = h;
+        out.push(["text", s.str, x, y + h * 0.8]); // text() puts its baseline at y
+      } else
+        out.push(
+          s.t === "rect"
+            ? ["rect", x, y, w, h]
+            : s.t === "ellipse"
+            ? ["ellipse", x + w / 2, y + h / 2, w, h]
+            : ["triangle", x + w / 2, y, x, y + h, x + w, y + h]
+        );
     }
     if (turned) {
       out.push(["pop"]);
-      [fill, stroke, weighted] = before;
+      [fill, stroke, weighted, size] = before;
     }
   }
   return out.map(([n, ...a]) => [
@@ -114,7 +140,10 @@ function paint(p, list) {
 }
 
 function snippet(list, name) {
-  const fmt = (v) => (typeof v === "string" ? `'${v}'` : v);
+  const fmt = (v) =>
+    typeof v === "string"
+      ? `'${v.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`
+      : v;
   const body = commands(list)
     .slice(1)
     .map(([n, ...a]) =>
@@ -135,9 +164,9 @@ function snippet(list, name) {
 }
 
 function hit(s, x, y) {
-  // check point on shape
+  // is the point on this shape?
   if (s.r) {
-    // turn point back instead of turning the shape
+    // turn the point back instead of turning the shape
     const c = centre(s),
       a = (-s.r * Math.PI) / 180,
       dx = x - c.x,
@@ -145,7 +174,7 @@ function hit(s, x, y) {
     x = c.x + dx * Math.cos(a) - dy * Math.sin(a);
     y = c.y + dx * Math.sin(a) + dy * Math.cos(a);
   }
-  if (s.t === "rect")
+  if (s.t === "rect" || s.t === "text")
     return x >= s.x && x <= s.x + s.w && y >= s.y && y <= s.y + s.h;
   if (s.t === "ellipse")
     return (
@@ -171,7 +200,7 @@ function hit(s, x, y) {
 }
 
 function shift(s, o, dx, dy) {
-  // put shape at its old spot + offset
+  // put a shape at its old spot plus an offset
   if (s.t === "line") {
     s.a = { x: o.a.x + dx, y: o.a.y + dy };
     s.b = { x: o.b.x + dx, y: o.b.y + dy };
@@ -183,12 +212,12 @@ function shift(s, o, dx, dy) {
 
 const current = () => shapes.concat(drag ? [shapeFrom(drag.a, drag.b)] : []);
 
-/* === naming, sticking, 2 code views === */
+/* ---- naming, sticking, and the two code views ---- */
 
 const cap = (w) => w[0].toUpperCase() + w.slice(1);
 
 function nameFor(text, id) {
-  // remove white space in naming function
+  // "school bag" → schoolBag
   const words = text
     .replace(/[^a-z0-9]+/gi, " ")
     .trim()
@@ -229,7 +258,7 @@ const P5_VAR = new Set(
   )
 );
 try {
-  // check with p5
+  // the editor bolds every p5 function, so ask p5 itself
   Object.keys(p5.prototype).forEach((k) => {
     if (k[0] === "_") return;
     if (typeof p5.prototype[k] === "function") P5_FN.add(k);
@@ -277,7 +306,7 @@ function hl(line) {
 }
 
 function renderCode() {
-  // live snippet under the pad
+  // the live snippet under the pad
   const text = snippet(current(), nameFor($("name").value, nextId));
   const lines = text.split("\n");
   $("code").innerHTML = lines
@@ -307,7 +336,7 @@ function renderCards(newId) {
       renderCards();
     };
     card.onclick = () => {
-      // select code so its ready to copy
+      // select the code so it is ready to copy
       const r = document.createRange();
       r.selectNodeContents(card.querySelector("pre"));
       getSelection().removeAllRanges();
@@ -317,7 +346,7 @@ function renderCards(newId) {
   });
 }
 
-/* === editor, output page === */
+/* ---- the editor and the output page ---- */
 
 const P5_SRC = document.querySelector('script[src*="p5"]').src;
 const STARTER = `function setup() {
@@ -332,17 +361,17 @@ function draw() {
 // paste your stickers below here, then call them in draw()
 `;
 
-/* inside output page (time every sticker call to be picked up + moved) */
+/* what runs inside the output page: it times every sticker call so it can be picked up and moved */
 function runtime() {
   const ov = {},
-    prims = ["rect", "ellipse", "triangle", "line"];
+    prims = ["rect", "ellipse", "triangle", "line", "text"];
   let frame = [],
     last = [],
     drag = null,
     lastErr = "";
 
   window.__s = (id, fn, x, y, ...rest) => {
-    // sticker call: __s(id, pencil, 100, 100, 0.8)
+    // a sticker call: __s(id, pencil, 100, 100, 0.8)
     if (ov[id]) {
       x = ov[id].x;
       y = ov[id].y;
@@ -360,7 +389,7 @@ function runtime() {
     prims.forEach((n) => {
       orig[n] = window[n];
       window[n] = (...a) => {
-        // note where each shape lands on page
+        // note where each shape lands on the page
         if (n === "rect") {
           add(a[0], a[1]);
           add(a[0] + a[2], a[1]);
@@ -372,6 +401,9 @@ function runtime() {
               add(a[0] + (i * a[2]) / 2, a[1] + (j * a[3]) / 2)
             )
           );
+        } else if (n === "text") {
+          add(a[1], a[2] - textAscent());
+          add(a[1] + textWidth(a[0]), a[2] + textDescent());
         } else if (n === "triangle") {
           add(a[0], a[1]);
           add(a[2], a[3]);
@@ -394,7 +426,7 @@ function runtime() {
   };
 
   window.__wrap = () => {
-    // keep boxes from the latest draw()
+    // keep the boxes from the latest draw()
     if (typeof window.draw !== "function") return;
     const d = window.draw;
     window.draw = function () {
@@ -453,7 +485,7 @@ function runtime() {
   });
 }
 
-let calls = {}; // sticker call id: where it sits in editor text
+let calls = {}; // sticker call id → where it sits in the editor text
 
 function run() {
   const src = $("editor").value;
@@ -463,7 +495,7 @@ function run() {
   calls = {};
   let code = src;
   if (names.length) {
-    // pencil(100, 120 > __s(17, pencil, 100, 120
+    // pencil(100, 120 → __s(17, pencil, 100, 120
     const re = new RegExp(
       String.raw`\b(${names.join(
         "|"
@@ -487,7 +519,7 @@ function run() {
 }
 
 function nudge(id, x, y) {
-  // rewrite the 2 numbers of 1 call in editor
+  // rewrite the two numbers of one call in the editor
   const ed = $("editor"),
     t = ed.value,
     at = calls[id];
@@ -501,7 +533,7 @@ function nudge(id, x, y) {
   for (const k in calls)
     if (calls[k] > at) calls[k] += head.length - m[0].length;
   ed.scrollTop = keep;
-  const top = 10 + t.slice(0, at).split("\n").length * 18 - 18; // bring changed line into view
+  const top = 10 + t.slice(0, at).split("\n").length * 18 - 18; // bring the changed line into view
   if (top < ed.scrollTop || top + 18 > ed.scrollTop + ed.clientHeight)
     ed.scrollTop = Math.max(0, top - ed.clientHeight / 2);
   paintEditor();
@@ -521,7 +553,7 @@ addEventListener("message", (e) => {
 });
 
 function paintEditor() {
-  // coloured copy of text behind textarea
+  // coloured copy of the text, sitting behind the textarea
   $("hl").innerHTML = $("editor").value.split("\n").map(hl).join("\n") + "\n";
   $("hl").scrollTop = $("editor").scrollTop;
   $("hl").scrollLeft = $("editor").scrollLeft;
@@ -537,7 +569,7 @@ $("editor").addEventListener("input", () => {
 });
 $("editor").addEventListener("keydown", (e) => {
   if (e.key === "Tab") {
-    // keep focus in editor, insert 2 spaces
+    // keep focus in the editor, insert two spaces
     e.preventDefault();
     document.execCommand("insertText", false, "  ");
   } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
@@ -546,19 +578,23 @@ $("editor").addEventListener("keydown", (e) => {
   }
 });
 
-/* === controls === */
+/* ---- controls ---- */
 
-["rect", "ellipse", "triangle", "line"].forEach((t) => {
+["rect", "ellipse", "triangle", "line", "text"].forEach((t) => {
   const b = document.createElement("button");
   b.textContent = t;
   b.classList.toggle("on", t === tool);
   b.onclick = () => {
     tool = t;
     [...$("tools").children].forEach((c) => c.classList.toggle("on", c === b));
+    showWords();
   };
   $("tools").append(b);
 });
 
+const showWords = () => {
+  $("words").hidden = !(mode === "draw" && tool === "text");
+};
 const HELP = {
   move: "drag a shape to move it to a new spot",
   rotate: "drag a corner to rotate a shape",
@@ -571,6 +607,7 @@ const HELP = {
     mode = m;
     [...$("modes").children].forEach((c) => c.classList.toggle("on", c === b));
     $("tools").hidden = m !== "draw"; // shapes only matter while drawing
+    showWords();
     $("movehelp").hidden = m === "draw";
     $("movehelp").textContent = HELP[m] || "";
     $("pad").classList.toggle("move", m === "move");
@@ -637,7 +674,7 @@ addEventListener("keydown", (e) => {
   }
 });
 
-/* === drawing pad (p5.js, instance mode) === */
+/* ---- the drawing pad (p5.js, instance mode) ---- */
 
 pad = new p5((p) => {
   const pt = () => ({
@@ -661,7 +698,7 @@ pad = new p5((p) => {
   p.mousePressed = () => {
     if (!inside()) return;
     if (mode !== "draw") {
-      // pick up top-most shape under pointer
+      // pick up the top-most shape under the pointer
       const s = [...shapes].reverse().find((s) => hit(s, p.mouseX, p.mouseY));
       if (s && mode === "rotate") {
         const c = centre(s);
@@ -688,7 +725,7 @@ pad = new p5((p) => {
   };
   p.mouseDragged = () => {
     if (moving && moving.turn) {
-      // angle moved around centre in degrees
+      // angle moved around the centre, in degrees
       const c = centre(moving.s),
         a = Math.atan2(p.mouseY - c.y, p.mouseX - c.x);
       moving.s.r =
@@ -720,9 +757,10 @@ pad = new p5((p) => {
     const s = shapeFrom(drag.a, drag.b);
     drag = null;
     const big =
-      s.t === "line"
+      s.t === "text" ||
+      (s.t === "line"
         ? Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y) > 3
-        : s.w > 3 && s.h > 3;
+        : s.w > 3 && s.h > 3);
     if (big) {
       shapes.push(s);
       undone = [];
