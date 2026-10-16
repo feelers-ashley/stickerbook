@@ -12,14 +12,14 @@ const COLOURS = [
   "#ffffff",
 ];
 const IDEAS = [
-  "pencil — rect + triangle + rect",
-  "flagpole — line + triangle + ellipse",
-  "school bag — rect + rect + ellipse",
-  "clock — ellipse + line + line",
-  "bell — triangle + rect + ellipse",
-  "ruler — rect + a row of short lines",
-  "book — rect + rect + line",
+  "tin can — rect + ellipse + ellipse",
+  "price tag — triangle + rect + ellipse",
+  "barcode — rect + a row of short lines",
+  "milk carton — rect + triangle + rect",
+  "carrot — triangle + line + triangle",
   "apple — ellipse + line + triangle",
+  "fish — ellipse + triangle",
+  "sale label — rect + text",
 ];
 
 const $ = (id) => document.getElementById(id);
@@ -355,7 +355,7 @@ const STARTER = `function setup() {
 
 function draw() {
   background('#ffffff');
-  // e.g. pencil(100, 100, 0.4);
+  // e.g. tin(100, 100, 0.4);
 }
 
 // paste your stickers below here, then call them in draw()
